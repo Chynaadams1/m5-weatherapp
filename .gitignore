@@ -1,0 +1,10 @@
+# Secrets
+kaggle.json
+.env
+
+# Large files
+raw/
+outputs/
+*.zip
+*.gz
+*.parquet
