@@ -1,106 +1,126 @@
-Business Context: 
+# M5 Demand Forecasting — Data Warehouse & ML Pipeline
 
-The M5 Weather App will help companies improve operational efficiencies, manage invenotry, and reduce waste. This will be established by prediciting daily unit sales 28 days in advance at the item-store level. This way retailers are able to make smarter decisions about restocking, pricing, and distrubtion of products. By having accurate forecasting this will help prevent overstock. The goal of this project is to build a data warehouse and forecasting pipeline. That will suport real-world business decisions using historical sales, calendar events, and pricing data. 
+A capstone data engineering and machine learning project built for CSDP 431 (Data Warehousing & Decision Support) at the University of Maryland Eastern Shore. The goal was to predict daily unit sales 28 days in advance at the item-store level using the Kaggle M5 Forecasting dataset.
 
+---
 
+## Project Overview
 
-Project Success Criteria:
+Retailers lose significant revenue from overstock and stockouts. This project addresses that problem by building a full end-to-end forecasting pipeline — from raw Kaggle data to a production-ready PostgreSQL data warehouse and a trained XGBoost model — that gives retailers the ability to make smarter decisions about restocking, pricing, and distribution.
 
-For this project, success means more than just building a model that runs. A successful outcome will include a well-designed data warehouse, a reproducible ETL process, and a forecasting model that performs well using a proper time-based validation approach.
+**Key results:**
+- Loaded **58,327,370 rows** into `fact_sales_daily`
+- XGBoost MAE: **1.0010** | RMSE: **1.9755**
+- Baseline MAE: **1.1912** | RMSE: **2.5743**
 
-From a technical standpoint, we want to ensure that:
+---
 
-The warehouse follows a clear star schema design.
+## Tech Stack
 
-Data can be loaded and validated consistently.
+| Layer | Tools |
+|---|---|
+| Database | PostgreSQL (schema: `m5_warehouse`, port: 5433) |
+| ETL | Python, pandas `.melt()` for wide-to-long unpivoting |
+| Modeling | Python, XGBoost, time-based cross-validation |
+| Schema Design | Star schema (3 dimensions, 2 fact tables) |
+| Docs | draw.io ERD, Markdown, PowerPoint |
 
-Forecasting models are evaluated fairly using appropriate error metrics.
+---
 
-The entire pipeline is documented and reproducible from raw data to final predictions.
+## Data Sources (Kaggle M5 Forecasting)
 
-Ultimately, a “good” project will demonstrate accuracy, organization, and the ability to support analytical queries and machine learning feature generation from the warehouse.
+| File | Description |
+|---|---|
+| `calendar.csv` | One row per day — dates, weekdays, events, SNAP indicators |
+| `sell_prices.csv` | Weekly item prices per store |
+| `sales_train_validation.csv` | Historical daily sales in wide format (1,919 day columns) |
+| `sales_train_evaluation.csv` | Extended dataset used for final model evaluation |
+| `sample_submission.csv` | Required output format — 28-day forecast per item-store |
 
+---
 
-Project Plan Timeline
-Week 5 – Understanding the Problem & Getting Organized
-This week we focused on fully understanding what the M5 forecasting problem is asking. The goal is to predict 28 days of daily unit sales at the item–store level, so we made sure we understood the business impact behind that (inventory planning, reducing overstock, and improving decision-making).
+## Warehouse Design
 
-We also set up our private GitHub repository and created the required folder structure. In addition, we drafted the data dictionary to better understand the structure, grain, and join keys of each dataset before moving into implementation.
+The warehouse follows a **star schema** stored in the `m5_warehouse` PostgreSQL schema.
 
-Week 6 – Data Acquisition & Warehouse Design
-In Week 6, we will download the required Kaggle datasets and document the download process for reproducibility.
+### Dimension Tables
+- **`dim_date`** — date, weekday, month, year, event flags, SNAP indicators
+- **`dim_item`** — item ID, department, category
+- **`dim_store`** — store ID, state
 
-We will perform initial data profiling, including checking row counts, identifying missing values, and verifying join keys.
+### Fact Tables
+- **`fact_sales_daily`** — grain: item × store × day | tracks daily units sold
+- **`fact_price_weekly`** — grain: item × store × week | tracks weekly sell price
 
-We will also design our star schema (dim_date, dim_item, dim_store, fact_sales_daily, and fact_price_weekly) and create an ERD to clearly visualize table relationships and grain definitions. Initial SQL table definitions will also be drafted.
+### Staging Tables
+- `stg_calendar`, `stg_sell_prices` — raw data landing zone before transformation
 
-Week 7 – Building the Foundation
-This week will focus on creating staging tables in PostgreSQL and loading the calendar and pricing datasets. We will then build the dimension tables and begin validating data integrity.
+An ETL load log (`etl_load_log`) tracks every load stage, row count, and status.
 
-Week 8 – Transforming Sales Data
-Because the sales dataset is in wide format, we will unpivot it into a long format so that each row represents one item, one store, and one specific day. This will allow us to properly build the fact_sales_daily table and align it with the rest of the warehouse.
+---
 
-Weeks 9–12 – Modeling & Evaluation
-During these weeks, we will engineer features (lags and rolling averages), implement a baseline forecasting model, and then develop at least one machine learning model. We will evaluate performance using time-based validation and compare results using appropriate error metrics.
+## ETL Process
 
-Week 13 – Final Review & Presentation
+The sales dataset arrives in wide format with one row per item-store and 1,919 daily columns (`d_1` to `d_1919`). Loading it required:
 
+1. **Chunked unpivoting** — processed 100 rows at a time using `pandas.melt()` to convert wide → long format without running out of memory
+2. **Dimension loading** — `etl/load_dimensions.py` handles `dim_date`, `dim_item`, `dim_store`
+3. **Fact loading** — `etl/load_fact_sales.py` loads the unpivoted sales rows into `fact_sales_daily`
 
+Full load result: **58,327,370 rows** in `fact_sales_daily`.
 
+---
 
+## Modeling & Results
 
+Features engineered from the warehouse included lag values and rolling averages. A baseline model was implemented first, followed by an XGBoost model evaluated using time-based validation.
 
-Team Role Assignment – Week 6
-To ensure equal contribution and clear accountability, Week 6 responsibilities are divided as follows:
+| Model | MAE | RMSE |
+|---|---|---|
+| Baseline | 1.1912 | 2.5743 |
+| **XGBoost** | **1.0010** | **1.9755** |
 
-Data Acquisition & Profiling Lead
-Responsibilities:
+XGBoost reduced MAE by ~16% and RMSE by ~23% over the baseline.
 
-Download the M5 dataset from Kaggle and document the acquisition method
+---
 
-Add raw/ to .gitignore and create a file manifest
+## Repo Structure
 
-Perform initial data profiling (row counts, missing values, join key validation)
+```
+m5-weatherapp-main/
+├── docs/
+│   ├── data_dictionary_draft.md
+│   ├── data_quality_report.md
+│   ├── demo_runbook.md
+│   └── m5_star_schema.drawio.png
+├── etl/
+│   ├── load_dimensions.py
+│   └── load_fact_sales.py
+├── sql/
+│   ├── ddl/
+│   │   ├── create_tables.sql
+│   │   └── create_ml_features.sql
+│   ├── queries/
+│   │   ├── olap_monthly_sales_trends.sql
+│   │   ├── olap_price_vs_sales.sql
+│   │   ├── olap_sales_by_category_state.sql
+│   │   └── olap_top_items_per_store.sql
+│   └── 02_ml_features_daily.sql
+└── README.md
+```
 
-Document findings in docs/profiling_report.md
+---
 
-Deliverables:
+## Team
 
-File manifest
+| Role | Responsibilities |
+|---|---|
+| **Warehouse Design & SQL Lead** | Star schema design, DDL scripts, ERD, OLAP queries |
+| **Data Acquisition & Profiling Lead** | Dataset download, profiling report, file manifest, ETL scripting |
 
-Profiling report
+---
 
-Updated README documentation
-
-Warehouse Design & ERD Lead
-Responsibilities:
-
-Finalize star schema design
-
-Define grain for fact tables
-
-Create ERD diagram
-
-Draft initial SQL DDL scripts (tables, primary keys, foreign keys, indexes)
-
-Document design decisions
-
-Deliverables:
-
-ERD diagram in docs/
-
-Initial DDL script in sql/ddl/
-
-Design explanation in README
-
-
-
-
-
-The final week will focus on polishing the warehouse, validating reproducibility, preparing our live demo, and finalizing documentation.
-
-
-## Week 9 — ETL Load Note
+*CSDP 431 — Data Warehousing & Decision Support | University of Maryland Eastern Shore | Spring 2026*
 Initially validated with first 500 items before scaling to full load.
 Full load completed: 58,327,370 rows in fact_sales_daily.
 
